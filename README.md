@@ -48,3 +48,5 @@ gunzip owt_valid.txt.gz
 cd ..
 ```
 
+### To profile a test:
+`uv run scalene -m pytest tests/test_train_bpe.py::test_train_bpe_speed --profile-all`
