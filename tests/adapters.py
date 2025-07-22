@@ -560,15 +560,12 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
+    # Do NOT add special tokens to vocab here: it's already present in the given `vocab` argument.
     vocabulary = Vocabulary(
         vocab_size=len(vocab),
         vocab=vocab,
         merges=merges)
-
-    if special_tokens is not None:
-        vocabulary.add_special_tokens(special_tokens)
-
-    tokenizer = BpeTokenizer(vocab=vocabulary)
+    tokenizer = BpeTokenizer(vocab=vocabulary, special_tokens=special_tokens)
     return tokenizer
 
 
