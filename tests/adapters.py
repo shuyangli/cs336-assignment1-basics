@@ -9,7 +9,7 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 
-from cs336_basics.bpe import Vocabulary, train_bpe
+from cs336_basics.bpe import Vocabulary, BpeTokenizer, train_bpe
 
 
 
@@ -560,7 +560,16 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    vocabulary = Vocabulary(
+        vocab_size=len(vocab),
+        vocab=vocab,
+        merges=merges)
+
+    if special_tokens is not None:
+        vocabulary.add_special_tokens(special_tokens)
+
+    tokenizer = BpeTokenizer(vocab=vocabulary)
+    return tokenizer
 
 
 def run_train_bpe(
