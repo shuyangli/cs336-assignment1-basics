@@ -151,10 +151,8 @@ class BpeTokenizer:
 
         if special_tokens:
             self.special_tokens = set(special_tokens)
-            self.vocab.add_special_tokens(special_tokens)
         else:
             self.special_tokens = set()
-
 
     @classmethod
     def from_files(cls, vocab_path: str | os.PathLike, merges_path: str | os.PathLike, special_tokens: list[str] | None = None) -> "BpeTokenizer":
@@ -190,15 +188,28 @@ class BpeTokenizer:
 
         return word_bytes
 
+    def __split_with_special_tokens(self, text: str) -> Iterable[str]:
+        if not self.special_tokens:
+            yield text
+            return
+
+        # First split the corpus with special tokens
+        split_special_token_pattern = "(" + "|".join([f"{re.escape(token)}" for token in self.special_tokens]) + ")"
+        yield from re.splititer(split_special_token_pattern, text)
+
+
     def encode(self, text: str) -> list[int]:
         text_bytes = []
 
-        # First split the corpus with special tokens
-        split_special_token_pattern = "|".join([f"({re.escape(token)})" for token in self.special_tokens])
+        for text_chunk in self.__split_with_special_tokens(text):
+            if text_chunk in self.special_tokens:
+                text_bytes.append(text_chunk.encode("utf-8"))
+                continue
 
-        for word in re.finditer(PRETOKENIZATION_PATTERN, text):
-            word_bytes = self._apply_merges(word.group(0), self.vocab.merges)
-            text_bytes.extend(word_bytes)
+            for word in re.finditer(PRETOKENIZATION_PATTERN, text_chunk):
+                word_bytes = self._apply_merges(word.group(0), self.vocab.merges)
+                text_bytes.extend(word_bytes)
+
         return self.vocab.lookup_tokens(text_bytes)
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterable[int]:
