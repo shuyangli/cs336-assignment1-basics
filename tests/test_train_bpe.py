@@ -4,6 +4,10 @@ import time
 from .adapters import run_train_bpe
 from .common import FIXTURES_PATH, gpt2_bytes_to_unicode
 
+import cProfile
+import pstats
+import io
+
 
 def test_train_bpe_speed():
     """
@@ -15,11 +19,21 @@ def test_train_bpe_speed():
     """
     input_path = FIXTURES_PATH / "corpus.en"
     start_time = time.time()
+    # pr = pr = cProfile.Profile()
+    # pr.enable()
+
     _, _ = run_train_bpe(
         input_path=input_path,
         vocab_size=500,
         special_tokens=["<|endoftext|>"],
     )
+    # pr.disable()
+    # s = io.StringIO()
+    # sortby = pstats.SortKey.CUMULATIVE
+    # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    # ps.print_stats()
+    # print(s.getvalue())
+
     end_time = time.time()
     assert end_time - start_time < 1.5
 
