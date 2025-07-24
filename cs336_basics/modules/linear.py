@@ -19,8 +19,8 @@ class Linear(torch.nn.Module):
         # construct and store weights as W (not W^T) for memory ordering reasons
         stddev = (2 / (in_features + out_features)) ** 0.5
         init_tensor = torch.empty((out_features, in_features), device=device, dtype=dtype)
-        self.weight = torch.nn.Parameter(
-            torch.nn.init.trunc_normal_(init_tensor, mean=0, std=stddev, a = -3 * stddev, b = 3 * stddev))
+        torch.nn.init.trunc_normal_(init_tensor, mean=0, std=stddev, a = -3 * stddev, b = 3 * stddev)
+        self.weight = torch.nn.Parameter(init_tensor)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return einops.einsum(x, self.weight, "... in, out in -> ... out")
