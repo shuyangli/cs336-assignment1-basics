@@ -9,7 +9,7 @@ class Embedding(torch.nn.Module):
                  embedding_dim: int,    # d_model
                  device: torch.device | None = None,
                  dtype: torch.dtype | None = None):
-        super(Embedding, self).__init__()
+        super().__init__()
 
         init_tensor: Float[Tensor, " vocab_size d_model"] = torch.empty((num_embeddings, embedding_dim), device=device, dtype=dtype)
         torch.nn.init.trunc_normal_(init_tensor, mean=0, std=1, a=-3, b=3)
