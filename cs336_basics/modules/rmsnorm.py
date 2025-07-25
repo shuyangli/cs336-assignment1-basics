@@ -9,7 +9,7 @@ class RMSNorm(torch.nn.Module):
                  eps: float = 1e-5,
                  device: torch.device | None = None,
                  dtype: torch.dtype | None = None):
-        super(RMSNorm, self).__init__()
+        super().__init__()
         self.d_model = d_model
         self.eps = eps
         self.gain = torch.nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
