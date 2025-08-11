@@ -23,4 +23,4 @@ class Linear(torch.nn.Module):
         self.weight = torch.nn.Parameter(init_tensor)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return einops.einsum(x, self.weight, "... in, out in -> ... out")
+        return einops.einsum(x, self.weight, "... d_in, d_out d_in -> ... d_out")

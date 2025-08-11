@@ -1,0 +1,48 @@
+import torch
+from torch import Tensor
+from jaxtyping import Float, Bool
+from einops import einsum, rearrange
+
+from cs336_basics.modules.attention import attention
+from cs336_basics.modules.linear import Linear
+
+class MultiHeadSelfAttention(torch.nn.Module):
+
+    def __init__(self, d_model: int, num_heads: int):
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
+
+        h_dk = h_dv = d_model
+        self.q_proj = Linear(in_features=d_model, out_features=h_dk)
+        self.k_proj = Linear(in_features=d_model, out_features=h_dk)
+        self.v_proj = Linear(in_features=d_model, out_features=h_dk)
+        self.out_proj = Linear(in_features=h_dv, out_features=d_model)
+
+    def forward(
+            self,
+            in_features: Float[Tensor, " ... sequence_length d_in"],
+        ) -> Float[Tensor, "... sequence_length d_out"]:
+        # input q_proj is (64, 64); model_size is 64 and num_heads is 4, so each head's dimension is (16, 64)
+        *_, seq_len, _ = in_features.shape
+
+        query:  Float[Tensor, "... seq_len hd_k"] = self.q_proj(in_features)
+        key:    Float[Tensor, "... seq_len hd_k"] = self.k_proj(in_features)
+        value:  Float[Tensor, "... seq_len hd_v"] = self.v_proj(in_features)
+
+        query = rearrange(query, "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", num_heads=self.num_heads)
+        key =   rearrange(key,   "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", num_heads=self.num_heads)
+        value = rearrange(value, "... seq_len (num_heads d_v) -> ... num_heads seq_len d_v", num_heads=self.num_heads)
+
+        # Mask is over the sequence length dimension
+        mask = torch.tril(torch.ones((seq_len, seq_len), device=in_features.device, dtype=torch.bool))
+
+        attention_output: Float[Tensor, "... num_heads seq_len d_v"] = attention(
+            query, key, value, mask=mask
+        )
+
+        # Reshape back
+        attention_output = rearrange(attention_output, "... num_heads seq_len d_v -> ... seq_len (num_heads d_v)",
+                                     num_heads=self.num_heads)
+        return self.out_proj(attention_output)

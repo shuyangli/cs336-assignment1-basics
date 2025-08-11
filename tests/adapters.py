@@ -16,7 +16,8 @@ from cs336_basics.modules.rmsnorm import RMSNorm
 from cs336_basics.modules.swiglu import SwiGLU
 from cs336_basics.modules.rope import RotaryPositionalEncoding
 from cs336_basics.modules.softmax import softmax
-from cs336_basics.modules.attention import ScaledDotProductAttention
+from cs336_basics.modules.attention import attention
+from cs336_basics.modules.multihead_attention import MultiHeadSelfAttention
 
 
 def run_linear(
@@ -117,8 +118,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    scaled_dot_product_attention_layer = ScaledDotProductAttention()
-    return scaled_dot_product_attention_layer(Q, K, V, mask)
+    return attention(Q, K, V, mask)
 
 
 def run_multihead_self_attention(
@@ -131,7 +131,7 @@ def run_multihead_self_attention(
     in_features: Float[Tensor, " ... sequence_length d_in"],
 ) -> Float[Tensor, " ... sequence_length d_out"]:
     """
-    Given the key, query, and value projection weights of a naive unbatched
+    Given the key, query, and value projection weights of a naive **unbatched**
     implementation of multi-head attention, return the output of an optimized batched
     implementation. This implementation should handle the key, query, and value projections
     for all heads in a single matrix multiply.
@@ -152,7 +152,16 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    multihead_layer = MultiHeadSelfAttention(d_model, num_heads)
+    weights = {
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "out_proj.weight": o_proj_weight,
+    }
+    multihead_layer.load_state_dict(weights)
+
+    return multihead_layer(in_features)
 
 
 def run_multihead_self_attention_with_rope(

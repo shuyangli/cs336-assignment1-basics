@@ -5,27 +5,18 @@ from einops import einsum
 
 from cs336_basics.modules.softmax import softmax
 
-class ScaledDotProductAttention(torch.nn.Module):
-    """
-    Scaled Dot-Product Attention module.
-    """
+def attention(query: Float[Tensor, "b ... seq_len d_k"],
+              key: Float[Tensor, "b ... seq_len d_k"],
+              value: Float[Tensor, "b ... seq_len d_v"],
+              mask: Bool[Tensor, " ... seq_len seq_len"] | None = None,
+              ) -> Float[Tensor, "b ... seq_len d_v"]:
+    *_, d_k = query.shape
+    multipled = einsum(query, key, "... queries d_k, ... keys d_k -> ... queries keys") / d_k**0.5
 
-    def __init__(self):
-        super().__init__()
+    if mask is not None:
+        multipled = multipled.masked_fill(mask == False, float('-inf'))
 
-    def forward(self,
-                query: Float[Tensor, "b ... queries d_k"],
-                key: Float[Tensor, "b ... keys d_k"],
-                value: Float[Tensor, "b ... keys d_v"],
-                mask: Float[Tensor, " ... queries keys"] | None = None,
-            ) -> Float[Tensor, "b ... queries d_v"]:
-        *_, d_k = query.shape
-        multipled = einsum(query, key, "... queries d_k, ... keys d_k -> ... queries keys") / d_k**0.5
-        # Apply mask
-        if mask is not None:
-            multipled = multipled.masked_fill(mask == 0, float('-inf'))
+    multipled = softmax(multipled, dim=-1)
+    multipled = einsum(multipled, value, "... queries keys, ... keys d_v -> ... queries d_v")
 
-        multipled = softmax(multipled, dim=-1)
-        multipled = einsum(multipled, value, "... queries keys, ... keys d_v -> ... queries d_v")
-
-        return multipled
+    return multipled
