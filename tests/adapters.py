@@ -19,6 +19,7 @@ from cs336_basics.modules.softmax import softmax
 from cs336_basics.modules.attention import attention
 from cs336_basics.modules.multihead_attention import MultiHeadSelfAttention
 from cs336_basics.modules.transformer_block import TransformerBlock
+from cs336_basics.modules.transformer_lm import TransformerLM
 
 
 def run_linear(
@@ -402,7 +403,20 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    renamed_weights = weights.copy()
+    renamed_weights["embedding.embedding"] = renamed_weights.pop("token_embeddings.weight")
+
+    transformer_lm = TransformerLM(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        num_layers=num_layers,
+        d_model=d_model,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        theta=rope_theta,
+    )
+    transformer_lm.load_state_dict(renamed_weights)
+    return transformer_lm(in_indices)
 
 
 def run_rmsnorm(
