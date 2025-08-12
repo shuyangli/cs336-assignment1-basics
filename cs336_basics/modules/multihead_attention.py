@@ -36,7 +36,11 @@ class MultiHeadSelfAttention(torch.nn.Module):
         value = rearrange(value, "... seq_len (num_heads d_v) -> ... num_heads seq_len d_v", num_heads=self.num_heads)
 
         # Mask is over the sequence length dimension
-        mask = torch.tril(torch.ones((seq_len, seq_len), device=in_features.device, dtype=torch.bool))
+        # mask = torch.tril(torch.ones((seq_len, seq_len), device=in_features.device, dtype=torch.bool))
+
+        # Equivalent mask computation with broadcasted index comparison
+        indices = torch.arange(seq_len, device=in_features.device)
+        mask: Bool[Tensor, "... seq_len seq_len"] = (indices <= indices.unsqueeze(-1))
 
         attention_output: Float[Tensor, "... num_heads seq_len d_v"] = attention(
             query, key, value, mask=mask
