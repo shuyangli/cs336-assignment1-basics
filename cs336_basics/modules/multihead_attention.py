@@ -26,7 +26,7 @@ class MultiHeadSelfAttention(torch.nn.Module):
         self.q_proj = Linear(in_features=d_model, out_features=h_dk, device=device, dtype=dtype)
         self.k_proj = Linear(in_features=d_model, out_features=h_dk, device=device, dtype=dtype)
         self.v_proj = Linear(in_features=d_model, out_features=h_dk, device=device, dtype=dtype)
-        self.out_proj = Linear(in_features=h_dv, out_features=d_model, device=device, dtype=dtype)
+        self.output_proj = Linear(in_features=h_dv, out_features=d_model, device=device, dtype=dtype)
 
         if (theta is not None
             and d_k is not None
@@ -77,4 +77,4 @@ class MultiHeadSelfAttention(torch.nn.Module):
         # Reshape back
         attention_output = rearrange(attention_output, "... num_heads seq_len d_v -> ... seq_len (num_heads d_v)",
                                      num_heads=self.num_heads)
-        return self.out_proj(attention_output)
+        return self.output_proj(attention_output)

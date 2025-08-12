@@ -32,20 +32,21 @@ class TransformerBlock(torch.nn.Module):
             max_sequence_length=max_seq_len,
             device=device,
             dtype=dtype)
-        self.rmsnorm1 = RMSNorm(d_model=d_model, device=device, dtype=dtype)
+        # Pre-Norm RMSNorm
+        self.ln1 = RMSNorm(d_model=d_model, device=device, dtype=dtype)
         self.ffn = SwiGLU(d_model=d_model, d_hidden=d_ff, device=device, dtype=dtype)
-        self.rmsnorm2 = RMSNorm(d_model=d_model, device=device, dtype=dtype)
+        self.ln2 = RMSNorm(d_model=d_model, device=device, dtype=dtype)
 
     def forward(self,
                 in_features: Float[Tensor, " ... sequence_length d_in"]) -> Float[Tensor, "... sequence_length d_out"]:
         # First half: Pre-norm + attention
-        out_features = self.rmsnorm1(in_features)
+        out_features = self.ln1(in_features)
         out_features = self.attn(out_features)
         out_features = out_features + in_features
 
         # Second half: Pre-norm + feed-forward
         intermediate_features = out_features
-        out_features = self.rmsnorm2(out_features)
+        out_features = self.ln2(out_features)
         out_features = self.ffn(out_features)
         out_features = out_features + intermediate_features
 

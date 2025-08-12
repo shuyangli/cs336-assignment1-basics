@@ -92,9 +92,9 @@ def run_swiglu(
     """
     swiglu_layer = SwiGLU(d_model, d_ff)
     weights = {
-        "linear1.weight": w1_weight,
-        "linear2.weight": w2_weight,
-        "linear3.weight": w3_weight,
+        "w1.weight": w1_weight,
+        "w2.weight": w2_weight,
+        "w3.weight": w3_weight,
     }
     swiglu_layer.load_state_dict(weights)
 
@@ -158,7 +158,7 @@ def run_multihead_self_attention(
         "q_proj.weight": q_proj_weight,
         "k_proj.weight": k_proj_weight,
         "v_proj.weight": v_proj_weight,
-        "out_proj.weight": o_proj_weight,
+        "output_proj.weight": o_proj_weight,
     }
     multihead_layer.load_state_dict(weights)
 
@@ -211,7 +211,7 @@ def run_multihead_self_attention_with_rope(
         "q_proj.weight": q_proj_weight,
         "k_proj.weight": k_proj_weight,
         "v_proj.weight": v_proj_weight,
-        "out_proj.weight": o_proj_weight,
+        "output_proj.weight": o_proj_weight,
     }
     multihead_layer.load_state_dict(weights)
 
@@ -318,18 +318,7 @@ def run_transformer_block(
         theta=theta,
         max_seq_len=max_seq_len,
     )
-    renamed_weights = {
-        "attn.q_proj.weight": weights["attn.q_proj.weight"],
-        "attn.k_proj.weight": weights["attn.k_proj.weight"],
-        "attn.v_proj.weight": weights["attn.v_proj.weight"],
-        "attn.out_proj.weight": weights["attn.output_proj.weight"],
-        "rmsnorm1.gain": weights["ln1.weight"],
-        "ffn.linear1.weight": weights["ffn.w1.weight"],
-        "ffn.linear2.weight": weights["ffn.w2.weight"],
-        "ffn.linear3.weight": weights["ffn.w3.weight"],
-        "rmsnorm2.gain": weights["ln2.weight"],
-    }
-    transformer_block.load_state_dict(renamed_weights)
+    transformer_block.load_state_dict(weights)
 
     return transformer_block(in_features)
 
@@ -437,7 +426,7 @@ def run_rmsnorm(
         RMSNorm of the `in_features`.
     """
     rms_norm_layer = RMSNorm(d_model, eps=eps)
-    rms_norm_layer.load_state_dict({"gain": weights})
+    rms_norm_layer.load_state_dict({"weight": weights})
     return rms_norm_layer(in_features)
 
 
