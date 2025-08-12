@@ -18,6 +18,7 @@ from cs336_basics.modules.rope import RotaryPositionalEmbedding
 from cs336_basics.modules.softmax import softmax
 from cs336_basics.modules.attention import attention
 from cs336_basics.modules.multihead_attention import MultiHeadSelfAttention
+from cs336_basics.modules.transformer_block import TransformerBlock
 
 
 def run_linear(
@@ -310,7 +311,27 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    transformer_block = TransformerBlock(
+        d_model=d_model,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        theta=theta,
+        max_seq_len=max_seq_len,
+    )
+    renamed_weights = {
+        "attn.q_proj.weight": weights["attn.q_proj.weight"],
+        "attn.k_proj.weight": weights["attn.k_proj.weight"],
+        "attn.v_proj.weight": weights["attn.v_proj.weight"],
+        "attn.out_proj.weight": weights["attn.output_proj.weight"],
+        "rmsnorm1.gain": weights["ln1.weight"],
+        "ffn.linear1.weight": weights["ffn.w1.weight"],
+        "ffn.linear2.weight": weights["ffn.w2.weight"],
+        "ffn.linear3.weight": weights["ffn.w3.weight"],
+        "rmsnorm2.gain": weights["ln2.weight"],
+    }
+    transformer_block.load_state_dict(renamed_weights)
+
+    return transformer_block(in_features)
 
 
 def run_transformer_lm(

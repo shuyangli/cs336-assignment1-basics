@@ -14,24 +14,27 @@ class MultiHeadSelfAttention(torch.nn.Module):
                  num_heads: int,
                  theta: float | None = None,
                  d_k: int | None = None,
-                 max_sequence_length: int | None = None):
+                 max_sequence_length: int | None = None,
+                 device: torch.device | None = None,
+                 dtype: torch.dtype | None = None):
         super().__init__()
         self.d_model = d_model
         self.num_heads = num_heads
         assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
 
         h_dk = h_dv = d_model
-        self.q_proj = Linear(in_features=d_model, out_features=h_dk)
-        self.k_proj = Linear(in_features=d_model, out_features=h_dk)
-        self.v_proj = Linear(in_features=d_model, out_features=h_dk)
-        self.out_proj = Linear(in_features=h_dv, out_features=d_model)
+        self.q_proj = Linear(in_features=d_model, out_features=h_dk, device=device, dtype=dtype)
+        self.k_proj = Linear(in_features=d_model, out_features=h_dk, device=device, dtype=dtype)
+        self.v_proj = Linear(in_features=d_model, out_features=h_dk, device=device, dtype=dtype)
+        self.out_proj = Linear(in_features=h_dv, out_features=d_model, device=device, dtype=dtype)
 
         if (theta is not None
             and d_k is not None
             and max_sequence_length is not None):
             self.rope = RotaryPositionalEmbedding(theta=theta,
                                                   d_k=d_k,
-                                                  max_sequence_length=max_sequence_length)
+                                                  max_sequence_length=max_sequence_length,
+                                                  device=device)
         else:
             self.rope = None
 
@@ -53,7 +56,9 @@ class MultiHeadSelfAttention(torch.nn.Module):
 
         if self.rope:
             if token_positions is None:
-                raise ValueError("token_positions must be provided when using RoPE.")
+                # Generate a token positions tensor if not provided
+                token_positions = torch.arange(seq_len, device=in_features.device, dtype=torch.int64)
+
             # Apply RoPE to query and key
             query = self.rope(query, token_positions)
             key = self.rope(key, token_positions)
