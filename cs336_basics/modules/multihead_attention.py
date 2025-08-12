@@ -1,14 +1,20 @@
 import torch
 from torch import Tensor
-from jaxtyping import Float, Bool
+from jaxtyping import Float, Bool, Int
 from einops import einsum, rearrange
 
 from cs336_basics.modules.attention import attention
 from cs336_basics.modules.linear import Linear
+from cs336_basics.modules.rope import RotaryPositionalEmbedding
 
 class MultiHeadSelfAttention(torch.nn.Module):
 
-    def __init__(self, d_model: int, num_heads: int):
+    def __init__(self,
+                 d_model: int,
+                 num_heads: int,
+                 theta: float | None = None,
+                 d_k: int | None = None,
+                 max_sequence_length: int | None = None):
         super().__init__()
         self.d_model = d_model
         self.num_heads = num_heads
@@ -20,9 +26,19 @@ class MultiHeadSelfAttention(torch.nn.Module):
         self.v_proj = Linear(in_features=d_model, out_features=h_dk)
         self.out_proj = Linear(in_features=h_dv, out_features=d_model)
 
+        if (theta is not None
+            and d_k is not None
+            and max_sequence_length is not None):
+            self.rope = RotaryPositionalEmbedding(theta=theta,
+                                                  d_k=d_k,
+                                                  max_sequence_length=max_sequence_length)
+        else:
+            self.rope = None
+
     def forward(
             self,
             in_features: Float[Tensor, " ... sequence_length d_in"],
+            token_positions: Int[Tensor, " ... sequence_length"] | None = None,
         ) -> Float[Tensor, "... sequence_length d_out"]:
         # input q_proj is (64, 64); model_size is 64 and num_heads is 4, so each head's dimension is (16, 64)
         *_, seq_len, _ = in_features.shape
@@ -34,6 +50,13 @@ class MultiHeadSelfAttention(torch.nn.Module):
         query = rearrange(query, "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", num_heads=self.num_heads)
         key =   rearrange(key,   "... seq_len (num_heads d_k) -> ... num_heads seq_len d_k", num_heads=self.num_heads)
         value = rearrange(value, "... seq_len (num_heads d_v) -> ... num_heads seq_len d_v", num_heads=self.num_heads)
+
+        if self.rope:
+            if token_positions is None:
+                raise ValueError("token_positions must be provided when using RoPE.")
+            # Apply RoPE to query and key
+            query = self.rope(query, token_positions)
+            key = self.rope(key, token_positions)
 
         # Mask is over the sequence length dimension
         # mask = torch.tril(torch.ones((seq_len, seq_len), device=in_features.device, dtype=torch.bool))

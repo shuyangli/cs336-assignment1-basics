@@ -4,7 +4,7 @@ from jaxtyping import Float
 from einops import einsum
 
 
-class RotaryPositionalEncoding(torch.nn.Module):
+class RotaryPositionalEmbedding(torch.nn.Module):
     def __init__(self,
                  theta: float,
                  d_k: int,

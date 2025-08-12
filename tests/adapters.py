@@ -14,7 +14,7 @@ from cs336_basics.modules.linear import Linear
 from cs336_basics.modules.embedding import Embedding
 from cs336_basics.modules.rmsnorm import RMSNorm
 from cs336_basics.modules.swiglu import SwiGLU
-from cs336_basics.modules.rope import RotaryPositionalEncoding
+from cs336_basics.modules.rope import RotaryPositionalEmbedding
 from cs336_basics.modules.softmax import softmax
 from cs336_basics.modules.attention import attention
 from cs336_basics.modules.multihead_attention import MultiHeadSelfAttention
@@ -201,7 +201,20 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    multihead_layer = MultiHeadSelfAttention(d_model,
+                                             num_heads,
+                                             theta=theta,
+                                             d_k = d_model // num_heads,
+                                             max_sequence_length=max_seq_len)
+    weights = {
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "out_proj.weight": o_proj_weight,
+    }
+    multihead_layer.load_state_dict(weights)
+
+    return multihead_layer(in_features, token_positions)
 
 
 def run_rope(
@@ -223,7 +236,7 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    rope_layer = RotaryPositionalEncoding(theta, d_k, max_seq_len)
+    rope_layer = RotaryPositionalEmbedding(theta, d_k, max_seq_len)
     return rope_layer(in_query_or_key, token_positions)
 
 
