@@ -100,3 +100,8 @@ This is 4.5e12 FLOPs.
 | **Total FLOPs** | 5.381E+11 | 1.381E+12 | 2.620E+12 | 4.513E+12 |
 
 (e) If we scale the context-length to 16,384: attention becomes the bottleneck (it scales quadratically, whereas the rest scales linearlly)
+
+
+## Learning Rate tuning
+
+With learning rate = 1e0, loss gradually decays; with learning rate = 1e1, loss decays faster; at 1e2 it decays very rapidly to 0 for the simple case, and at 1e3 it never converged.
