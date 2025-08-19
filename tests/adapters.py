@@ -15,12 +15,12 @@ from cs336_basics.modules.embedding import Embedding
 from cs336_basics.modules.rmsnorm import RMSNorm
 from cs336_basics.modules.swiglu import SwiGLU
 from cs336_basics.modules.rope import RotaryPositionalEmbedding
-from cs336_basics.modules.softmax import softmax
-from cs336_basics.modules.attention import attention
+from cs336_basics.functional.softmax import softmax
+from cs336_basics.functional.attention import attention
 from cs336_basics.modules.multihead_attention import MultiHeadSelfAttention
 from cs336_basics.modules.transformer_block import TransformerBlock
 from cs336_basics.modules.transformer_lm import TransformerLM
-from cs336_basics.modules.cross_entropy import cross_entropy_loss
+from cs336_basics.functional.cross_entropy import cross_entropy_loss
 
 
 def run_linear(

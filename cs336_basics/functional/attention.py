@@ -3,7 +3,7 @@ from torch import Tensor
 from jaxtyping import Float, Bool
 from einops import einsum
 
-from cs336_basics.modules.softmax import softmax
+from cs336_basics.functional.softmax import softmax
 
 def attention(query: Float[Tensor, "b ... seq_len d_k"],
               key: Float[Tensor, "b ... seq_len d_k"],

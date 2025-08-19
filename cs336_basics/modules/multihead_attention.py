@@ -3,7 +3,7 @@ from torch import Tensor
 from jaxtyping import Float, Bool, Int
 from einops import einsum, rearrange
 
-from cs336_basics.modules.attention import attention
+from cs336_basics.functional.attention import attention
 from cs336_basics.modules.linear import Linear
 from cs336_basics.modules.rope import RotaryPositionalEmbedding
 
