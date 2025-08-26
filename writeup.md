@@ -105,3 +105,22 @@ This is 4.5e12 FLOPs.
 ## Learning Rate tuning
 
 With learning rate = 1e0, loss gradually decays; with learning rate = 1e1, loss decays faster; at 1e2 it decays very rapidly to 0 for the simple case, and at 1e3 it never converged.
+
+## AdamW accounting
+
+Assuming we're using float32 for every value.
+
+For gradient calculation, we need to store the activations for each layer, the parameters themselves, gradient for each parameter, and 2 additional values per parameter as optimizer state (first moment and second moment estimates). At peak we need all these values in the memory.
+
+Parameters, gradients, and optimizer states are tied to the number of parameters - we need 4x parameter values; if each values is a float32 (4 bytes), this is 16 bytes per parameter.
+
+For activations:
+- For each transformer block, we store **inputs** into computations for gradient computation:
+  * Attention output = input into output_proj: batch_size * seq_len * d_model
+  * Multihead self-attention: Q*K^T, softmax output: batch_size * seq_len * d_model * d_model * 2; Q, K, V: batch_size * seq_len * d_model * 3
+  * 2x RMSNorm: we store the output, 2 * (batch_size * seq_len * d_model).
+  * FFN: 3 * batch_size * seq_len * d_hidden
+- Final RMSNorm: batch_size * seq_len * d_model
+- Output embedding: we just need the output,
+- Cross-entropy on logits: (???)
+
