@@ -9,7 +9,8 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 
-from cs336_basics.tokenizer.bpe import Vocabulary, BpeTokenizer, train_bpe
+from cs336_basics.tokenizer.bpe import Vocabulary, BpeTokenizer
+from cs336_basics.tokenizer.bpe_training import train_bpe
 from cs336_basics.modules.linear import Linear
 from cs336_basics.modules.embedding import Embedding
 from cs336_basics.modules.rmsnorm import RMSNorm

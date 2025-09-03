@@ -2,11 +2,8 @@ import regex as re
 import os
 
 from dataclasses import dataclass
-from collections import defaultdict
 from collections.abc import Sequence
 from typing import Iterable
-
-from .pretokenization_example import find_chunk_boundaries
 
 
 # GPT-2 pre-tokenization pattern
@@ -63,83 +60,6 @@ class Vocabulary:
     def lookup_tokens(self, input_bytes: list[bytes]) -> list[int]:
         # TODO: Figure out an "UNKNOWN" token
         return [self.bytes_to_token.get(b, -1) for b in input_bytes]
-
-
-# This is a hot spot:
-def compute_next_merge(tokens: dict[Sequence[bytes], int]) -> tuple[bytes, bytes]:
-    # Compute token statistics
-    token_stats: dict[tuple[bytes, bytes], int] = defaultdict(int)
-
-    # Still room to improve here, since across two runs only one pair changes.
-    for word, count in tokens.items():
-        for i in range(len(word) - 1):
-            token_stats[(word[i], word[i + 1])] += count
-
-    # Merge tokens
-    highest_count = -1
-    highest_tokens: tuple[bytes, bytes] = (b"", b"")
-
-    for pair, count in token_stats.items():
-        if count > highest_count or count == highest_count and highest_tokens < pair:
-            highest_count = count
-            highest_tokens = pair
-    return highest_tokens
-
-
-def update_words(pretokenized_words_to_count: dict[Sequence[bytes], int], merge: tuple[bytes, bytes]) -> dict[Sequence[bytes], int]:
-    new_pretokenized_words_to_count = {}
-    for word, count in pretokenized_words_to_count.items():
-        new_word = []
-        i = 0
-
-        if merge[0] not in word or merge[1] not in word:
-            new_pretokenized_words_to_count[word] = count
-            continue
-
-        word_len = len(word)
-        while i <= word_len - 1:
-            if i == word_len - 1:
-                new_word.append(word[i])
-                i += 1
-            elif (word[i], word[i + 1]) == merge:
-                new_word.append(word[i] + word[i + 1])
-                i += 2
-            else:
-                new_word.append(word[i])
-                i += 1
-        new_pretokenized_words_to_count[tuple(new_word)] = count
-    return new_pretokenized_words_to_count
-
-
-def train_bpe_with_text(corpus: str, vocab_size: int, special_tokens: list[str]):
-    assert vocab_size >= 256 + len(special_tokens)
-
-    vocab = Vocabulary(vocab_size=vocab_size)
-    vocab.init_for_training()
-
-    # First split the corpus with special tokens
-    split_special_token_pattern = "|".join([re.escape(token) for token in special_tokens])
-
-    # We only need to pretokenize each word once, then multiply by count
-    pretokenized_words_to_count: dict[Sequence[bytes], int] = defaultdict(int)
-
-    for corpus_chunk in re.split(split_special_token_pattern, corpus):
-        # Pretokenize
-        for word in re.finditer(PRETOKENIZATION_PATTERN, corpus_chunk):
-            # TODO: why is this so annoying to use?
-            word_key = tuple([bytes([c]) for c in word.group(0).encode("utf-8")])
-            pretokenized_words_to_count[word_key] += 1
-
-    # BPE training loop
-    target_vocab_size = vocab_size - len(special_tokens)
-    while len(vocab.token_to_bytes) < target_vocab_size:
-        next_merge = compute_next_merge(pretokenized_words_to_count)
-        vocab.merge_tokens(next_merge)
-        pretokenized_words_to_count = update_words(pretokenized_words_to_count, next_merge)
-
-    vocab.add_special_tokens(special_tokens)
-
-    return vocab
 
 
 class BpeTokenizer:
@@ -219,25 +139,3 @@ class BpeTokenizer:
     def decode(self, token_ids: list[int]) -> str:
         bytes_list = [self.vocab.token_to_bytes[token_id] for token_id in token_ids if token_id in self.vocab.token_to_bytes]
         return b"".join(bytes_list).decode("utf-8", errors="ignore")
-
-
-def train_bpe(input_path: str | os.PathLike, vocab_size: int, special_tokens: list[str], num_processes: int = 4) -> Vocabulary:
-    # TODO: Do this when we need to train on TinyStories.
-    #
-    # with open(input_path, "rb") as f:
-    #     boundaries = find_chunk_boundaries(
-    #         f, num_processes, "<|endoftext|>".encode("utf-8"))
-
-    #     # The following is a serial implementation, but you can parallelize this
-    #     # by sending each start/end pair to a set of processes.
-    #     boundaries = zip(boundaries[:-1], boundaries[1:])
-    #     for start, end in boundaries:
-    #         # Read the chunk and decode it
-    #         f.seek(start)
-    #         chunk = f.read(end - start).decode("utf-8", errors="ignore")
-    #         # Run pre-tokenization on your chunk and store the counts for each pre-token
-
-    with open(input_path, "r", encoding="utf-8") as f:
-        corpus = f.read()
-
-    return train_bpe_with_text(corpus, vocab_size, special_tokens)
