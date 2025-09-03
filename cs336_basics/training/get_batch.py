@@ -21,10 +21,12 @@ def get_batch(
     # High is exclusive here
     starts = torch.randint(0, max_start_idx + 1, size=(batch_size, ))
 
-    # TODO: Is there a better way to do this?
-    data_tensor = torch.tensor(dataset, device=device)
-    unfolded_tensor = data_tensor.unfold(0, context_size, 1)
-    inputs = unfolded_tensor[starts]
-    targets = unfolded_tensor[starts + 1]
+    data_tensor = torch.as_tensor(dataset, device=device)
+    offsets = torch.arange(context_size, device=device)
+
+    # Add an extra dimension to starts so we can broadcast the addition in 2 dimensions.
+    idx = starts.unsqueeze(1) + offsets
+    inputs = data_tensor[idx]
+    targets = data_tensor[idx + 1]
 
     return (inputs, targets)
