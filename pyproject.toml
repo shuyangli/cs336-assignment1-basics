@@ -21,6 +21,7 @@ dependencies = [
     "scalene>=1.5.51",
     "ty>=0.0.1a16",
     "matplotlib>=3.10.5",
+    "typer>=0.17.3",
 ]
 
 [build-system]
