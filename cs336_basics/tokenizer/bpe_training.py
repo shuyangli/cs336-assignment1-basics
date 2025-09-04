@@ -1,11 +1,12 @@
 import regex as re
 import heapq
 import os
+from multiprocessing import Pool
 
 from collections.abc import Sequence
 from collections import defaultdict
 
-from cs336_basics.tokenizer.bpe import Vocabulary, PRETOKENIZATION_PATTERN
+from cs336_basics.tokenizer.bpe import Vocabulary, BpeTokenizer
 from cs336_basics.tokenizer.pretokenization_example import find_chunk_boundaries
 
 
@@ -73,39 +74,51 @@ def update_words(pretokenized_words_to_count: dict[Sequence[bytes], int], merge:
     return new_pretokenized_words_to_count, changes
 
 
-def train_bpe_with_text(corpus: str, vocab_size: int, special_tokens: list[str]):
+def _worker_pretokenize_and_count(
+    args: tuple[str | os.PathLike, int, int, list[str]]
+) -> tuple[dict[Sequence[bytes], int], dict[tuple[bytes, bytes], int]]:
+    """Worker function for pre-tokenization and counting."""
+    input_path, start, end, special_tokens = args
+    pretokenized_words_to_count: dict[Sequence[bytes], int] = defaultdict(int)
+    token_stats: dict[tuple[bytes, bytes], int] = defaultdict(int)
+
+    with open(input_path, "rb") as f:
+        f.seek(start)
+        chunk = f.read(end - start).decode("utf-8", errors="ignore")
+
+    for word in BpeTokenizer.corpus_to_pretokenized_words(chunk, special_tokens):
+        word_key = tuple([bytes([c]) for c in word])
+        pretokenized_words_to_count[word_key] += 1
+        for i in range(len(word_key) - 1):
+            token_stats[(word_key[i], word_key[i + 1])] += 1
+    return pretokenized_words_to_count, token_stats
+
+
+def train_bpe_from_pretokenized(
+    pretokenized_words_to_count: dict[Sequence[bytes], int],
+    token_stats: dict[tuple[bytes, bytes], int],
+    vocab_size: int,
+    special_tokens: list[str],
+) -> Vocabulary:
+    """Trains BPE from pre-tokenized and counted words."""
     assert vocab_size >= 256 + len(special_tokens)
 
     vocab = Vocabulary(vocab_size=vocab_size)
     vocab.init_for_training()
 
-    # First split the corpus with special tokens
-    split_special_token_pattern = "|".join([re.escape(token) for token in special_tokens])
-
-    # We only need to pretokenize each word once, then multiply by count
-    pretokenized_words_to_count: dict[Sequence[bytes], int] = defaultdict(int)
-
-    for corpus_chunk in re.split(split_special_token_pattern, corpus):
-        # Pretokenize
-        for word in re.finditer(PRETOKENIZATION_PATTERN, corpus_chunk):
-            # TODO: why is this so annoying to use?
-            word_key = tuple([bytes([c]) for c in word.group(0).encode("utf-8")])
-            pretokenized_words_to_count[word_key] += 1
-
-    # Optimized BPE training loop using a heap for merge selection
     target_vocab_size = vocab_size - len(special_tokens)
-
-    # Compute initial token pair statistics
-    token_stats = defaultdict(int)
-    for word, count in pretokenized_words_to_count.items():
-        for i in range(len(word) - 1):
-            token_stats[(word[i], word[i + 1])] += count
 
     # Build a max-heap for token pairs
     heap = [(count, pair) for pair, count in token_stats.items()]
     heapq._heapify_max(heap)
 
+    total_iterations = target_vocab_size - len(vocab.token_to_bytes)
+    it = 0
+
     while len(vocab.token_to_bytes) < target_vocab_size and heap:
+        it += 1
+        if it % 100 == 0 or it == 1:
+            print(f"Iteration {it} / {total_iterations}")
         # Get the most frequent pair
         _, next_merge = heapq.heappop(heap)
         vocab.merge_tokens(next_merge)
@@ -135,23 +148,38 @@ def train_bpe_with_text(corpus: str, vocab_size: int, special_tokens: list[str])
     return vocab
 
 
+def train_bpe_with_text(corpus: str, vocab_size: int, special_tokens: list[str]):
+    # We only need to pretokenize each word once, then multiply by count
+    pretokenized_words_to_count: dict[Sequence[bytes], int] = defaultdict(int)
+    token_stats: dict[tuple[bytes, bytes], int] = defaultdict(int)
+
+    for word in BpeTokenizer.corpus_to_pretokenized_words(corpus, special_tokens):
+        word_key = tuple([bytes([c]) for c in word])
+        pretokenized_words_to_count[word_key] += 1
+        for i in range(len(word_key) - 1):
+            token_stats[(word_key[i], word_key[i + 1])] += 1
+
+    return train_bpe_from_pretokenized(pretokenized_words_to_count, token_stats, vocab_size, special_tokens)
+
+
 def train_bpe(input_path: str | os.PathLike, vocab_size: int, special_tokens: list[str], num_processes: int = 4) -> Vocabulary:
-    # TODO: Do this when we need to train on TinyStories.
-    #
-    # with open(input_path, "rb") as f:
-    #     boundaries = find_chunk_boundaries(
-    #         f, num_processes, "<|endoftext|>".encode("utf-8"))
+    with open(input_path, "rb") as f:
+        boundaries = find_chunk_boundaries(f, num_processes, "<|endoftext|>".encode("utf-8"))
 
-    #     # The following is a serial implementation, but you can parallelize this
-    #     # by sending each start/end pair to a set of processes.
-    #     boundaries = zip(boundaries[:-1], boundaries[1:])
-    #     for start, end in boundaries:
-    #         # Read the chunk and decode it
-    #         f.seek(start)
-    #         chunk = f.read(end - start).decode("utf-8", errors="ignore")
-    #         # Run pre-tokenization on your chunk and store the counts for each pre-token
+    boundaries_per_process = zip(boundaries[:-1], boundaries[1:])
+    pool_args = [(input_path, start, end, special_tokens) for start, end in boundaries_per_process]
 
-    with open(input_path, "r", encoding="utf-8") as f:
-        corpus = f.read()
+    with Pool(processes=num_processes) as pool:
+        results = pool.map(_worker_pretokenize_and_count, pool_args)
 
-    return train_bpe_with_text(corpus, vocab_size, special_tokens)
+    # Aggregate results from all processes
+    aggregated_counts: dict[Sequence[bytes], int] = defaultdict(int)
+    aggregated_token_stats: dict[tuple[bytes, bytes], int] = defaultdict(int)
+    for result in results:
+        pretokenized_words_to_count, token_stats = result
+        for word, count in pretokenized_words_to_count.items():
+            aggregated_counts[word] += count
+        for pair, count in token_stats.items():
+            aggregated_token_stats[pair] += count
+
+    return train_bpe_from_pretokenized(aggregated_counts, aggregated_token_stats, vocab_size, special_tokens)

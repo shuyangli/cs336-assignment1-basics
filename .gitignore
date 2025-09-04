@@ -165,3 +165,8 @@ cython_debug/
 # Scalene
 profile.html
 profile.json
+
+.DS_Store
+
+# Data
+data/
