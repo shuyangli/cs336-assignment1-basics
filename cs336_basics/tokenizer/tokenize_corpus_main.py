@@ -3,7 +3,7 @@ import time
 import numpy as np
 from typing_extensions import Annotated
 
-from cs336_basics.tokenizer.bpe import Vocabulary, BpeTokenizer
+from cs336_basics.tokenizer.bpe import BpeTokenizer
 
 def tokenize_corpus(
     corpus_path: Annotated[str, typer.Option("--corpus-path", "-c", help="Path to the training corpus text file")] = "data/TinyStoriesV2-GPT4-valid.txt",
