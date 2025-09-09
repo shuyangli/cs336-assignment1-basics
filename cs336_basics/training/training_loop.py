@@ -14,7 +14,8 @@ from cs336_basics.training.checkpointing import save_checkpoint
 from cs336_basics.training.get_batch import get_batch
 
 def main(
-    dataset_path: Annotated[str, typer.Option("--dataset-path", help="Path to the training dataset")] = "data/TinystoriesV2-tokenized.npy",
+    train_dataset_path: Annotated[str, typer.Option("--train-dataset", help="Path to the training dataset")] = "data/TinystoriesV2-train.npy",
+    val_dataset_path: Annotated[str, typer.Option("--val-dataset", help="Path to the validation dataset")] = "data/TinystoriesV2-valid.npy",
 
     # Model hyperparameters
     context_length: Annotated[int, typer.Option("--context-length", "-c", help="Context length for the model")] = 128,
@@ -57,30 +58,42 @@ def main(
     optimizer = AdamW(model.parameters(), lr=learning_rate, betas=(beta1, beta2), weight_decay=weight_decay, eps=epsilon)
 
     # Load data corpus
-    data_corpus: npt.NDArray = np.load(dataset_path, mmap_mode="r")
-    # Convert this to int64 for CPU compatibility
-    data_corpus = data_corpus.astype(np.int64)
+    train_set: npt.NDArray = np.load(train_dataset_path, mmap_mode="r")
+    train_set = train_set.astype(np.int64)
 
+    val_set: npt.NDArray = np.load(val_dataset_path, mmap_mode="r")
+    val_set = val_set.astype(np.int64)
+
+    loss_iters = []
     losses = []
+    val_losses = []
 
     # Actual training loop!
     for iteration in range(1, epochs + 1):
         optimizer.zero_grad()
 
         # Forward pass
-        xs, ys = get_batch(dataset=data_corpus, batch_size=batch_size, context_size=context_length, device=device)
+        xs, ys = get_batch(dataset=train_set, batch_size=batch_size, context_size=context_length, device=device)
         logits = model(xs)
 
         loss = cross_entropy_loss(logits[:, -1, :], ys[:, -1])
-        losses.append(loss.item())
 
         # Backward pass
         loss.backward()
         optimizer.step()
 
+        # Save loss for plotting
+        val_xs, val_ys = get_batch(dataset=val_set, batch_size=batch_size, context_size=context_length, device=device)
+        val_logits = model(val_xs)
+        val_loss = cross_entropy_loss(val_logits[:, -1, :], val_ys[:, -1])
+
+        loss_iters.append(iteration)
+        losses.append(loss.item())
+        val_losses.append(val_loss.item())
+
         # Save checkpoint periodically
         if (iteration) % save_every == 0:
-            print(f"Epoch {iteration} / {epochs}: loss: {loss.item():.4f}")
+            print(f"Epoch {iteration} / {epochs}: training loss: {loss.item():.4f}; validation loss: {val_loss.item():.4f}")
             checkpoint_path = f"{save_path}/epoch-{iteration}.pt"
             save_checkpoint(model, optimizer, iteration, checkpoint_path)
 
@@ -90,11 +103,9 @@ def main(
     # )
 
     # Print loss chart
-    t_list = list(range(1, epochs + 1))
-
     plt.figure(figsize=(8, 5))
-    plt.plot(t_list, losses, label=f"Loss")
-
+    plt.plot(loss_iters, losses, label=f"Training loss")
+    plt.plot(loss_iters, val_losses, label=f"Validation loss")
     plt.xlabel("Step")
     plt.ylabel("Loss")
     plt.title("Cross-entropy loss over training")
@@ -103,5 +114,6 @@ def main(
     plt.show()
 
 
+# uv run ./cs336_basics/training/training_loop.py --train-dataset data/TinystoriesV2-train.npy --val-dataset data/TinystoriesV2-valid.npy --num-layers 2 --d-model 128 --num-heads 4 --d-ff 512 --learning-rate 0.001 --weight-decay 0.01 --batch-size 32 --epochs 1000 --device cpu --save-every 100 --save-path ./checkpoints
 if __name__ == "__main__":
     typer.run(main)
