@@ -19,7 +19,7 @@ def get_batch(
     max_start_idx = input_range - context_size - 1 # -1 so we can sample the corresponding y
 
     # High is exclusive here
-    starts = torch.randint(0, max_start_idx + 1, size=(batch_size, ))
+    starts = torch.randint(0, max_start_idx + 1, size=(batch_size, ), device=device)
 
     data_tensor = torch.as_tensor(dataset, device=device)
     offsets = torch.arange(context_size, device=device)

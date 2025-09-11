@@ -42,8 +42,8 @@ def main(
         num_heads=num_heads,
         d_ff=d_ff,
         theta=rope_theta,
+        device=torch.device(device),
     )
-    model.to(device)
 
     # Load the checkpoint
     load_checkpoint(checkpoint_path, model, optimizer=None)
@@ -64,7 +64,7 @@ def main(
         input_tokens = tokenizer.encode(prompt)
         print("Input tokens: ", input_tokens)
 
-        input_tensor = torch.tensor(input_tokens, dtype=torch.int64)
+        input_tensor = torch.tensor(input_tokens, dtype=torch.int64, device=device)
 
         num_generations = 0
 
@@ -85,6 +85,6 @@ def main(
             print("\n[Reached max generation length]")
 
 
-# uv run ./cs336_basics/inference/inference_main.py --checkpoint checkpoints/epoch-1000.pt --num-layers 2 --d-model 128 --num-heads 4 --d-ff 512 --device cpu --temperature 1.0 --max-length 100
+# uv run ./cs336_basics/inference/inference_main.py --checkpoint checkpoints/epoch-10000.pt --num-layers 10 --d-model 128 --num-heads 8 --d-ff 512 --device cpu --temperature 1.0 --max-length 100
 if __name__ == "__main__":
     typer.run(main)

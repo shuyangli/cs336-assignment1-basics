@@ -24,7 +24,7 @@ class RotaryPositionalEmbedding(torch.nn.Module):
 
 
     def _compute_frequencies(self) -> Tensor:
-        angles = 1 / (self.theta ** (torch.arange(0, self.d_k, step=2).float() / self.d_k))
+        angles = 1 / (self.theta ** (torch.arange(0, self.d_k, step=2, device=self.device).float() / self.d_k))
 
         # seq_len * 1 vector
         positions = torch.arange(0, self.max_sequence_length, step=1, device=self.device).float()

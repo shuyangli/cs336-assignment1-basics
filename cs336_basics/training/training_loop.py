@@ -4,6 +4,7 @@ import numpy as np
 import numpy.typing as npt
 import os
 import matplotlib.pyplot as plt
+import torch
 
 # import wandb
 
@@ -53,6 +54,7 @@ def main(
         num_heads=num_heads,
         d_ff=d_ff,
         theta=rope_theta,
+        device=torch.device(device),
     )
 
     # Initialize the optimizer
