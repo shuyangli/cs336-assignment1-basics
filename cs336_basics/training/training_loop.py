@@ -5,6 +5,7 @@ import numpy.typing as npt
 import os
 import matplotlib.pyplot as plt
 import torch
+import time
 
 # import wandb
 
@@ -75,6 +76,7 @@ def main(
 
     # Actual training loop!
     print("Training started...")
+    start_time = time.perf_counter()
 
     for iteration in range(1, epochs + 1):
         optimizer.zero_grad()
@@ -88,6 +90,10 @@ def main(
         # Backward pass
         loss.backward()
         optimizer.step()
+
+        stop_time = time.perf_counter()
+        print("Step time: ", stop_time - start_time)
+        start_time = stop_time
 
         # Save checkpoint periodically
         if iteration % save_every == 0:
