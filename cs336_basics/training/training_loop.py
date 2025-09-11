@@ -37,8 +37,9 @@ def main(
     batch_size: Annotated[int, typer.Option("--batch-size", "-b", help="Batch size for training")] = 32,
     epochs: Annotated[int, typer.Option("--epochs", "-e", help="Number of training epochs")] = 100,
     device: Annotated[str, typer.Option("--device", help="Device to use for training (e.g., 'cpu', 'cuda')")] = "cpu",
-    save_every: Annotated[int, typer.Option("--save-every", "-s", help="Save model every N epochs")] = 20,
-    save_path: Annotated[str, typer.Option("--save-path", "-p", help="Path to save the model")] = "checkpoints",
+    save_every: Annotated[int, typer.Option("--save-every", help="Save model every N epochs")] = 20,
+    save_path: Annotated[str, typer.Option("--save-path", help="Path to save the model")] = "checkpoints",
+    validate_every: Annotated[int, typer.Option("--validate-every", help="Save model every N epochs")] = 100,
 ):
     # Create save directory if it doesn't exist
     os.makedirs(save_path, exist_ok=True)
@@ -66,9 +67,13 @@ def main(
 
     loss_iters = []
     losses = []
+
+    validation_iters = []
     val_losses = []
 
     # Actual training loop!
+    print("Training started...")
+
     for iteration in range(1, epochs + 1):
         optimizer.zero_grad()
 
@@ -82,20 +87,26 @@ def main(
         loss.backward()
         optimizer.step()
 
-        # Save loss for plotting
-        val_xs, val_ys = get_batch(dataset=val_set, batch_size=batch_size, context_size=context_length, device=device)
-        val_logits = model(val_xs)
-        val_loss = cross_entropy_loss(val_logits[:, -1, :], val_ys[:, -1])
-
-        loss_iters.append(iteration)
-        losses.append(loss.item())
-        val_losses.append(val_loss.item())
-
         # Save checkpoint periodically
-        if (iteration) % save_every == 0:
-            print(f"Epoch {iteration} / {epochs}: training loss: {loss.item():.4f}; validation loss: {val_loss.item():.4f}")
+        if iteration % save_every == 0:
             checkpoint_path = f"{save_path}/epoch-{iteration}.pt"
             save_checkpoint(model, optimizer, iteration, checkpoint_path)
+
+        # Also log validation periodically
+        if iteration % validate_every == 0:
+            print(f"Epoch {iteration} / {epochs}: training loss: {loss.item():.4f}")
+
+            loss_iters.append(iteration)
+            losses.append(loss.item())
+
+            val_xs, val_ys = get_batch(dataset=val_set, batch_size=batch_size, context_size=context_length, device=device)
+            val_logits = model(val_xs)
+            val_loss = cross_entropy_loss(val_logits[:, -1, :], val_ys[:, -1])
+
+            validation_iters.append(iteration)
+            val_losses.append(val_loss.item())
+            print(f"validation loss: {val_loss.item():.4f}")
+
 
     # TODO: add W&B logging
     # training_run = wandb.init(
