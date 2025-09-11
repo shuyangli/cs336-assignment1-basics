@@ -1,15 +1,40 @@
 import typer
 from typing_extensions import Annotated
-import numpy as np
 import torch
 from torch import Tensor
-
-# import wandb
 
 from cs336_basics.modules.transformer_lm import TransformerLM
 from cs336_basics.tokenizer.bpe import BpeTokenizer
 from cs336_basics.functional.softmax import softmax
 from cs336_basics.training.checkpointing import load_checkpoint
+
+def sample_from_distribution(
+    model: torch.nn.Module,
+    input_tensor: Tensor,
+    temperature: float = 1.0,
+    eps: float = 1e-6,
+    top_p: float | None = None,
+    num_samples: int = 1,
+) -> Tensor:
+    # Returns the index of token sampled from the distribution.
+    output = model(input_tensor)
+    output_logits = output[-1, :]  # Get logits for the last token
+    output_probs = softmax(output_logits / (temperature + eps), -1)
+
+    if top_p is not None:
+        # Manipulate the output_probs to only keep the top_p cumulative probability mass
+        sorted_probs, sorted_indices = torch.sort(output_probs, descending=True)
+        cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+
+        sorted_indices_to_remove = cumulative_probs > top_p
+        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+        sorted_indices_to_remove[..., 0] = 0
+
+        indices_to_remove = sorted_indices[sorted_indices_to_remove]
+        output_probs[indices_to_remove] = 0.0
+
+    output_sample = torch.multinomial(output_probs, num_samples, replacement=True)
+    return output_sample
 
 def main(
     checkpoint_path: Annotated[str, typer.Option("--checkpoint", help="Path to the checkpoint")],
@@ -30,8 +55,9 @@ def main(
     merges_path: Annotated[str, typer.Option("--merges-path", "-m", help="Path for the trained tokenizer merges")] = "data/tinystories-merges.txt",
 
     # Sampling
-    temperature: Annotated[float, typer.Option("--temperature", "-r", help="Sampling temperature")] = 1.0,
-    max_length: Annotated[int, typer.Option("--max-length", "-b", help="Maximum generation length")] = 100,
+    temperature: Annotated[float, typer.Option("--temperature", help="Sampling temperature")] = 1.0,
+    top_p: Annotated[float | None, typer.Option("--top-p", help="Top-p sampling threshold")] = None,
+    max_length: Annotated[int, typer.Option("--max-length", help="Maximum generation length")] = 100,
 ):
     # Initialize a model with the same architecture
     model = TransformerLM(
@@ -54,9 +80,6 @@ def main(
 
     print("Model loaded successfully.")
 
-    # For sampling
-    eps = 1e-6
-
     while True:
         prompt = input("\nEnter a prompt (Ctrl+C to quit): ")
 
@@ -71,16 +94,22 @@ def main(
         while num_generations < max_length:
             num_generations += 1
 
-            output = model(input_tensor)
-            output_logits = output[-1, :]  # Get logits for the last token
-            output_probs = softmax(output_logits / (temperature + eps), -1)
-
-            output_sample = torch.multinomial(output_probs, 1)
+            output_sample = sample_from_distribution(
+                model,
+                input_tensor,
+                temperature=temperature,
+                eps=1e-6,
+                top_p=top_p,
+                num_samples=1,
+            )
             output_token = tokenizer.decode(output_sample.tolist())
-
             print(output_token, end="", flush=True)
             if output_token == "<|endoftext|>":
                 break
+
+            # Append the sampled token to the input tensor for the next iteration
+            input_tensor = torch.cat([input_tensor, output_sample], dim=0)
+
         if num_generations >= max_length:
             print("\n[Reached max generation length]")
 
