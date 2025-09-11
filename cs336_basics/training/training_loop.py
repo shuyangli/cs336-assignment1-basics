@@ -7,10 +7,11 @@ import matplotlib.pyplot as plt
 import torch
 import time
 
-# import wandb
+import wandb
 
 from cs336_basics.modules.transformer_lm import TransformerLM
 from cs336_basics.optimizer.adamw import AdamW
+from cs336_basics.optimizer.gradient_clipping import clip_gradient
 from cs336_basics.functional.cross_entropy import cross_entropy_loss
 from cs336_basics.training.checkpointing import save_checkpoint
 from cs336_basics.training.get_batch import get_batch
@@ -35,6 +36,12 @@ def main(
     weight_decay: Annotated[float, typer.Option("--weight-decay", "-w", help="Weight decay for AdamW optimizer")] = 0.01,
     epsilon: Annotated[float, typer.Option("--epsilon", help="Epsilon for AdamW optimizer")] = 1e-8,
 
+    max_l2_norm: Annotated[float | None, typer.Option("--max-l2-norm", help="Max L2 norm for gradient clipping")] = None,
+
+    min_learning_rate: Annotated[float | None, typer.Option("--min-learning-rate", help="Minimum learning rate after cosine annealing")] = None,
+    num_warmup_iterations: Annotated[int | None, typer.Option("--num-warmup-iterations", help="Number of warmup iterations for learning rate schedule")] = None,
+    cosine_annealing_iterations: Annotated[int | None, typer.Option("--cosine-annealing-iterations", help="Number of iterations for cosine annealing")] = None,
+
     # Training hyperparameters
     batch_size: Annotated[int, typer.Option("--batch-size", "-b", help="Batch size for training")] = 32,
     epochs: Annotated[int, typer.Option("--epochs", "-e", help="Number of training epochs")] = 100,
@@ -45,6 +52,35 @@ def main(
 ):
     # Create save directory if it doesn't exist
     os.makedirs(save_path, exist_ok=True)
+
+    # Weights and Biases logging
+    run = wandb.init(
+        entity="shuyangli-personal",
+        project="cs336-basics-assignment1",
+        config={
+            "context_length": context_length,
+            "vocab_size": vocab_size,
+            "num_layers": num_layers,
+            "d_model": d_model,
+            "num_heads": num_heads,
+            "d_ff": d_ff,
+            "rope_theta": rope_theta,
+
+            "learning_rate": learning_rate,
+            "beta1": beta1,
+            "beta2": beta2,
+            "weight_decay": weight_decay,
+            "epsilon": epsilon,
+            "max_l2_norm": max_l2_norm,
+
+            "min_learning_rate": min_learning_rate,
+            "num_warmup_iterations": num_warmup_iterations,
+            "cosine_annealing_iterations": cosine_annealing_iterations,
+
+            "batch_size": batch_size,
+            "epochs": epochs,
+        }
+    )
 
     # Initialize a new model
     model = TransformerLM(
@@ -76,6 +112,7 @@ def main(
 
     # Actual training loop!
     print("Training started...")
+    overall_start_time = time.perf_counter()
     start_time = time.perf_counter()
 
     for iteration in range(1, epochs + 1):
@@ -89,11 +126,21 @@ def main(
 
         # Backward pass
         loss.backward()
+
+        # Apply gradient clipping before optimizer step
+        if max_l2_norm is not None:
+            clip_gradient(model.parameters(), max_l2_norm)
+
+        # TODO: Update learning rate based on schedule
+
         optimizer.step()
 
         stop_time = time.perf_counter()
-        print("Step time: ", stop_time - start_time)
+        step_time = stop_time - start_time
+        print(f"Step time: {step_time}")
         start_time = stop_time
+
+        run.log({"train-loss": loss.item(), "step_time": step_time}, step=iteration)
 
         # Save checkpoint periodically
         if iteration % save_every == 0:
@@ -115,11 +162,13 @@ def main(
             val_losses.append(val_loss.item())
             print(f"validation loss: {val_loss.item():.4f}")
 
+            run.log({"val-loss": val_loss.item()}, step=iteration)
 
-    # TODO: add W&B logging
-    # training_run = wandb.init(
-    #     entity="shuyangli-personal"
-    # )
+
+    overall_end_time = time.perf_counter()
+    print("Overall training time: ", overall_end_time - overall_start_time)
+
+    run.finish()
 
     # Print loss chart
     plt.figure(figsize=(8, 5))

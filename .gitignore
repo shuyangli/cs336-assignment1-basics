@@ -171,3 +171,6 @@ profile.json
 # Data
 data/
 checkpoints/
+
+# Weights & Biases
+wandb/
