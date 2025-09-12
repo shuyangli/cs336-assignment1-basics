@@ -12,6 +12,7 @@ import wandb
 from cs336_basics.modules.transformer_lm import TransformerLM
 from cs336_basics.optimizer.adamw import AdamW
 from cs336_basics.optimizer.gradient_clipping import clip_gradient
+from cs336_basics.optimizer.lr_cosine_schedule import get_cosine_annealing_learning_rate_schedule
 from cs336_basics.functional.cross_entropy import cross_entropy_loss
 from cs336_basics.training.checkpointing import save_checkpoint
 from cs336_basics.training.get_batch import get_batch
@@ -65,6 +66,9 @@ def main(
         print(f"Training for {epochs} epochs to process approximately {total_tokens_processed} tokens")
     else:
         raise ValueError("Either --epochs or --total-tokens must be provided")
+
+    if num_warmup_iterations is not None and cosine_annealing_iterations is None:
+        cosine_annealing_iterations = epochs
 
     training_config = {
         "context_length": context_length,
@@ -143,7 +147,11 @@ def main(
         if max_l2_norm is not None:
             clip_gradient(model.parameters(), max_l2_norm)
 
-        # TODO: Update learning rate based on schedule
+        # Cosine annealing, if applicable
+        if num_warmup_iterations is not None and cosine_annealing_iterations is not None:
+            scheduled_lr = get_cosine_annealing_learning_rate_schedule(iteration - 1, learning_rate, min_learning_rate if min_learning_rate is not None else 0.0, num_warmup_iterations, cosine_annealing_iterations)
+            for group in optimizer.param_groups:
+                group['lr'] = scheduled_lr
 
         optimizer.step()
 
@@ -175,8 +183,11 @@ def main(
             "train-loss": loss.item(),
             "val-loss": val_loss.item(),
             "step-time": step_time,
-            "gradient-l2-norm": gradient_norm,# torch.linalg.norm(torch.cat([p.grad.view(-1) for p in model.parameters() if p.grad is not None])),
-            "weight-l2-norm": weight_norm, #torch.linalg.norm(torch.cat([p.data.view(-1) for p in model.parameters()]))
+            "gradient-l2-norm": gradient_norm,
+            "weight-l2-norm": weight_norm,
+
+            # TODO: Maybe make this more robust?
+            "learning-rate": optimizer.param_groups[0]['lr'],
         },  step=iteration)
 
         del val_xs, val_ys, val_logits, val_loss, xs, ys, logits, loss
@@ -188,7 +199,7 @@ def main(
     run.finish()
 
     # Save final checkpoint
-    checkpoint_path = f"{save_path}/final.pt"
+    checkpoint_path = f"{save_path}/{run.name}-final.pt"
     save_checkpoint(model, optimizer, epochs, checkpoint_path)
 
 

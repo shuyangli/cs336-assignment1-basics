@@ -54,7 +54,7 @@ cd ..
 
 ### Commands to launch
 ```
-uv run ./cs336_basics/training/training_loop.py --train-dataset data/TinystoriesV2-train.npy --val-dataset data/TinystoriesV2-valid.npy --num-layers 4 --vocab-size 10000 --context-length 256 --d-model 512 --num-heads 16 --d-ff 1344 --rope-theta 10000 --learning-rate 0.001 --weight-decay 0.001 --batch-size 32 --total-tokens 10000000 --device mps --save-every 500 --save-path ./checkpoints --enable-wandb
+uv run ./cs336_basics/training/training_loop.py --train-dataset data/TinystoriesV2-train.npy --val-dataset data/TinystoriesV2-valid.npy --num-layers 4 --vocab-size 10000 --context-length 256 --d-model 512 --num-heads 16 --d-ff 1344 --rope-theta 10000 --beta2 0.95 --learning-rate 0.001 --weight-decay 0.0001 --batch-size 32 --epochs 400 --device mps --save-every 500 --save-path ./checkpoints --enable-wandb --num-warmup-iterations 100
 ```
 
 ```

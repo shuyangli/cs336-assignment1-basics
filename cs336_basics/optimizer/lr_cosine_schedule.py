@@ -1,6 +1,7 @@
 import math
 
 def get_cosine_annealing_learning_rate_schedule(
+    # t is 0-indexed iteration count
     t: int,
     max_lr: float,
     min_lr: float,
