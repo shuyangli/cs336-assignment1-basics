@@ -50,3 +50,13 @@ cd ..
 
 ### To profile a test:
 `uv run scalene -m pytest tests/test_train_bpe.py::test_train_bpe_speed --profile-all`
+
+
+### Commands to launch
+```
+uv run ./cs336_basics/training/training_loop.py --train-dataset data/TinystoriesV2-train.npy --val-dataset data/TinystoriesV2-valid.npy --num-layers 4 --vocab-size 10000 --context-length 256 --d-model 512 --num-heads 16 --d-ff 1344 --rope-theta 10000 --learning-rate 0.001 --weight-decay 0.001 --batch-size 32 --total-tokens 10000000 --device mps --save-every 500 --save-path ./checkpoints --enable-wandb
+```
+
+```
+uv run ./cs336_basics/inference/inference_main.py --checkpoint checkpoints/epoch-5000.pt --num-layers 4 --vocab-size 10000 --context-length 256 --d-model 512 --num-heads 16 --d-ff 1344 --rope-theta 10000 --device mps --temperature 0.0 --top-p 0.9 --max-length 256
+```

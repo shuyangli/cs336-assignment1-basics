@@ -34,7 +34,6 @@ def main(
     beta1: Annotated[float, typer.Option("--beta1", help="Beta1 for AdamW optimizer")] = 0.9,
     beta2: Annotated[float, typer.Option("--beta2", help="Beta2 for AdamW optimizer")] = 0.999,
     weight_decay: Annotated[float, typer.Option("--weight-decay", "-w", help="Weight decay for AdamW optimizer")] = 0.01,
-    epsilon: Annotated[float, typer.Option("--epsilon", help="Epsilon for AdamW optimizer")] = 1e-8,
 
     max_l2_norm: Annotated[float | None, typer.Option("--max-l2-norm", help="Max L2 norm for gradient clipping")] = None,
 
@@ -43,43 +42,60 @@ def main(
     cosine_annealing_iterations: Annotated[int | None, typer.Option("--cosine-annealing-iterations", help="Number of iterations for cosine annealing")] = None,
 
     # Training hyperparameters
-    batch_size: Annotated[int, typer.Option("--batch-size", "-b", help="Batch size for training")] = 32,
-    epochs: Annotated[int, typer.Option("--epochs", "-e", help="Number of training epochs")] = 100,
+    batch_size: Annotated[int, typer.Option("--batch-size", help="Batch size for training")] = 32,
+    epochs: Annotated[int | None, typer.Option("--epochs", help="Number of training epochs")] = None,
     device: Annotated[str, typer.Option("--device", help="Device to use for training (e.g., 'cpu', 'cuda')")] = "cpu",
     save_every: Annotated[int, typer.Option("--save-every", help="Save model every N epochs")] = 20,
     save_path: Annotated[str, typer.Option("--save-path", help="Path to save the model")] = "checkpoints",
-    validate_every: Annotated[int, typer.Option("--validate-every", help="Save model every N epochs")] = 100,
+    total_tokens_processed: Annotated[int | None, typer.Option("--total-tokens", help="Total tokens we want to process, ignored if --epochs is provided")] = None,
+
+    # Misc
+    enable_wandb: Annotated[bool, typer.Option("--enable-wandb/--disable-wandb", help="Enable Weights and Biases logging")] = True,
 ):
     # Create save directory if it doesn't exist
     os.makedirs(save_path, exist_ok=True)
+
+    # Compute epoch targets
+    if epochs is not None:
+        print(f"Training for {epochs} epochs")
+    elif total_tokens_processed is not None:
+        if total_tokens_processed <= 0:
+            raise ValueError(f"Total tokens to process must be positive, got {total_tokens_processed}")
+        epochs = total_tokens_processed // (batch_size * context_length)
+        print(f"Training for {epochs} epochs to process approximately {total_tokens_processed} tokens")
+    else:
+        raise ValueError("Either --epochs or --total-tokens must be provided")
+
+    training_config = {
+        "context_length": context_length,
+        "vocab_size": vocab_size,
+        "num_layers": num_layers,
+        "d_model": d_model,
+        "num_heads": num_heads,
+        "d_ff": d_ff,
+        "rope_theta": rope_theta,
+
+        "learning_rate": learning_rate,
+        "beta1": beta1,
+        "beta2": beta2,
+        "weight_decay": weight_decay,
+        "max_l2_norm": max_l2_norm,
+
+        "min_learning_rate": min_learning_rate,
+        "num_warmup_iterations": num_warmup_iterations,
+        "cosine_annealing_iterations": cosine_annealing_iterations,
+
+        "batch_size": batch_size,
+        "epochs": epochs,
+    }
+    print("Training configuration: ", training_config)
 
     # Weights and Biases logging
     run = wandb.init(
         entity="shuyangli-personal",
         project="cs336-basics-assignment1",
-        config={
-            "context_length": context_length,
-            "vocab_size": vocab_size,
-            "num_layers": num_layers,
-            "d_model": d_model,
-            "num_heads": num_heads,
-            "d_ff": d_ff,
-            "rope_theta": rope_theta,
-
-            "learning_rate": learning_rate,
-            "beta1": beta1,
-            "beta2": beta2,
-            "weight_decay": weight_decay,
-            "epsilon": epsilon,
-            "max_l2_norm": max_l2_norm,
-
-            "min_learning_rate": min_learning_rate,
-            "num_warmup_iterations": num_warmup_iterations,
-            "cosine_annealing_iterations": cosine_annealing_iterations,
-
-            "batch_size": batch_size,
-            "epochs": epochs,
-        }
+        config=training_config,
+        mode="online" if enable_wandb else "disabled",
     )
 
     # Initialize a new model
@@ -93,9 +109,11 @@ def main(
         theta=rope_theta,
         device=torch.device(device),
     )
+    # Compiling model to speed up training
+    model.compile(backend="aot_eager")
 
     # Initialize the optimizer
-    optimizer = AdamW(model.parameters(), lr=learning_rate, betas=(beta1, beta2), weight_decay=weight_decay, eps=epsilon)
+    optimizer = AdamW(model.parameters(), lr=learning_rate, betas=(beta1, beta2), weight_decay=weight_decay, eps=1e-8)
 
     # Load data corpus
     train_set: npt.NDArray = np.load(train_dataset_path, mmap_mode="r")
@@ -103,12 +121,6 @@ def main(
 
     val_set: npt.NDArray = np.load(val_dataset_path, mmap_mode="r")
     val_set = val_set.astype(np.int64)
-
-    loss_iters = []
-    losses = []
-
-    validation_iters = []
-    val_losses = []
 
     # Actual training loop!
     print("Training started...")
@@ -137,32 +149,37 @@ def main(
 
         stop_time = time.perf_counter()
         step_time = stop_time - start_time
-        print(f"Step time: {step_time}")
+        print(f"{step_time=}")
         start_time = stop_time
 
-        run.log({"train-loss": loss.item(), "step_time": step_time}, step=iteration)
+        all_gradients = torch.cat([p.grad.view(-1) for p in model.parameters() if p.grad is not None])
+        gradient_norm = torch.linalg.norm(all_gradients)
+        all_weights = torch.cat([p.data.view(-1) for p in model.parameters()])
+        weight_norm = torch.linalg.norm(all_weights)
+
 
         # Save checkpoint periodically
         if iteration % save_every == 0:
             checkpoint_path = f"{save_path}/epoch-{iteration}.pt"
             save_checkpoint(model, optimizer, iteration, checkpoint_path)
 
-        # Also log validation periodically
-        if iteration % validate_every == 0:
-            print(f"Epoch {iteration} / {epochs}: training loss: {loss.item():.4f}")
+        # Also log validation
+        val_xs, val_ys = get_batch(dataset=val_set, batch_size=batch_size, context_size=context_length, device=device)
+        val_logits = model(val_xs)
+        val_loss = cross_entropy_loss(val_logits[:, -1, :], val_ys[:, -1])
 
-            loss_iters.append(iteration)
-            losses.append(loss.item())
+        print(f"Epoch {iteration} / {epochs}: training loss: {loss.item():.4f}, validation loss: {val_loss.item():.4f}")
 
-            val_xs, val_ys = get_batch(dataset=val_set, batch_size=batch_size, context_size=context_length, device=device)
-            val_logits = model(val_xs)
-            val_loss = cross_entropy_loss(val_logits[:, -1, :], val_ys[:, -1])
 
-            validation_iters.append(iteration)
-            val_losses.append(val_loss.item())
-            print(f"validation loss: {val_loss.item():.4f}")
+        run.log({
+            "train-loss": loss.item(),
+            "val-loss": val_loss.item(),
+            "step-time": step_time,
+            "gradient-l2-norm": gradient_norm,# torch.linalg.norm(torch.cat([p.grad.view(-1) for p in model.parameters() if p.grad is not None])),
+            "weight-l2-norm": weight_norm, #torch.linalg.norm(torch.cat([p.data.view(-1) for p in model.parameters()]))
+        },  step=iteration)
 
-            run.log({"val-loss": val_loss.item()}, step=iteration)
+        del val_xs, val_ys, val_logits, val_loss, xs, ys, logits, loss
 
 
     overall_end_time = time.perf_counter()
@@ -170,16 +187,9 @@ def main(
 
     run.finish()
 
-    # Print loss chart
-    plt.figure(figsize=(8, 5))
-    plt.plot(loss_iters, losses, label=f"Training loss")
-    plt.plot(loss_iters, val_losses, label=f"Validation loss")
-    plt.xlabel("Step")
-    plt.ylabel("Loss")
-    plt.title("Cross-entropy loss over training")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+    # Save final checkpoint
+    checkpoint_path = f"{save_path}/final.pt"
+    save_checkpoint(model, optimizer, epochs, checkpoint_path)
 
 
 # uv run ./cs336_basics/training/training_loop.py --train-dataset data/TinystoriesV2-train.npy --val-dataset data/TinystoriesV2-valid.npy --num-layers 2 --d-model 128 --num-heads 4 --d-ff 512 --learning-rate 0.001 --weight-decay 0.01 --batch-size 32 --epochs 1000 --device cpu --save-every 100 --save-path ./checkpoints
