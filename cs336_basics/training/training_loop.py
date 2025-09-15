@@ -45,6 +45,7 @@ def main(
     # Training hyperparameters
     batch_size: Annotated[int, typer.Option("--batch-size", help="Batch size for training")] = 32,
     epochs: Annotated[int | None, typer.Option("--epochs", help="Number of training epochs")] = None,
+    gradient_accumulation_steps: Annotated[int, typer.Option("--gradient-accumulation-steps", help="Number of steps to accumulate gradients before updating weights")] = 1,
     device: Annotated[str, typer.Option("--device", help="Device to use for training (e.g., 'cpu', 'cuda')")] = "cpu",
     save_every: Annotated[int, typer.Option("--save-every", help="Save model every N epochs")] = 20,
     save_path: Annotated[str, typer.Option("--save-path", help="Path to save the model")] = "checkpoints",
@@ -134,14 +135,23 @@ def main(
     for iteration in range(1, epochs + 1):
         optimizer.zero_grad()
 
-        # Forward pass
-        xs, ys = get_batch(dataset=train_set, batch_size=batch_size, context_size=context_length, device=device)
-        logits = model(xs)
+        # We only take a gradient step every `gradient_accumulation_steps` iterations
+        total_train_loss = 0.0
+        for grad_step in range(gradient_accumulation_steps):
+            # Forward pass
+            xs, ys = get_batch(dataset=train_set, batch_size=batch_size, context_size=context_length, device=device)
+            logits = model(xs)
 
-        loss = cross_entropy_loss(logits[:, -1, :], ys[:, -1])
+            loss = cross_entropy_loss(logits[:, -1, :], ys[:, -1])
+            print(f"Iteration {iteration}:{grad_step}, loss: {loss.item()}")
+            total_train_loss += loss.item()
 
-        # Backward pass
-        loss.backward()
+            loss /= gradient_accumulation_steps
+
+            # Backward pass
+            loss.backward()
+
+            del xs, ys, logits
 
         # Apply gradient clipping before optimizer step
         if max_l2_norm is not None:
@@ -176,11 +186,13 @@ def main(
         val_logits = model(val_xs)
         val_loss = cross_entropy_loss(val_logits[:, -1, :], val_ys[:, -1])
 
-        print(f"Epoch {iteration} / {epochs}: training loss: {loss.item():.4f}, validation loss: {val_loss.item():.4f}")
+        avg_train_loss = total_train_loss / gradient_accumulation_steps
+
+        print(f"Epoch {iteration} / {epochs}: training loss: {avg_train_loss:.4f}, validation loss: {val_loss.item():.4f}")
 
 
         run.log({
-            "train-loss": loss.item(),
+            "train-loss": avg_train_loss,
             "val-loss": val_loss.item(),
             "step-time": step_time,
             "gradient-l2-norm": gradient_norm,
@@ -190,7 +202,7 @@ def main(
             "learning-rate": optimizer.param_groups[0]['lr'],
         },  step=iteration)
 
-        del val_xs, val_ys, val_logits, val_loss, xs, ys, logits, loss
+        del val_xs, val_ys, val_logits, val_loss, loss
 
 
     overall_end_time = time.perf_counter()
