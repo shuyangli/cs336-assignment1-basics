@@ -138,14 +138,18 @@ def main(
 
         # We only take a gradient step every `gradient_accumulation_steps` iterations
         total_train_loss = 0.0
+        total_train_perplexity = 0.0
+
         for grad_step in range(gradient_accumulation_steps):
             # Forward pass
             xs, ys = get_batch(dataset=train_set, batch_size=batch_size, context_size=context_length, device=device)
             logits = model(xs)
 
             loss = cross_entropy_loss(logits, ys)
-            print(f"Iteration {iteration}:{grad_step}, loss: {loss.item()}")
+            perplexity = torch.exp(loss)
+            print(f"Iteration {iteration}:{grad_step}, loss: {loss.item():.4f}, perplexity: {perplexity.item():.4f}")
             total_train_loss += loss.item()
+            total_train_perplexity += perplexity.item()
 
             loss /= gradient_accumulation_steps
 
@@ -186,15 +190,19 @@ def main(
         val_xs, val_ys = get_batch(dataset=val_set, batch_size=batch_size, context_size=context_length, device=device)
         val_logits = model(val_xs)
         val_loss = cross_entropy_loss(val_logits, val_ys)
+        val_perplexity = torch.exp(val_loss)
 
         avg_train_loss = total_train_loss / gradient_accumulation_steps
+        avg_train_perplexity = total_train_perplexity / gradient_accumulation_steps
 
-        print(f"Epoch {iteration} / {epochs}: training loss: {avg_train_loss:.4f}, validation loss: {val_loss.item():.4f}")
+        print(f"Epoch {iteration} / {epochs}: training loss: {avg_train_loss:.4f}, validation loss: {val_loss.item():.4f}, validation perplexity: {val_perplexity:.4f}")
 
 
         run.log({
             "train-loss": avg_train_loss,
+            "train-perplexity": avg_train_perplexity,
             "val-loss": val_loss.item(),
+            "val-perplexity": val_perplexity.item(),
             "step-time": step_time,
             "gradient-l2-norm": gradient_norm,
             "weight-l2-norm": weight_norm,
