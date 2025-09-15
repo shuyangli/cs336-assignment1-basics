@@ -2,6 +2,7 @@ import torch
 from torch import Tensor
 from jaxtyping import Float, Int
 
+@torch.compile(backend="aot_eager")
 def cross_entropy_loss(predicted: Float[Tensor, "batch_size seq_len vocab"],
                        target: Int[Tensor, "batch_size seq_len"]) -> Float[Tensor, ""]:
     """
