@@ -89,6 +89,7 @@ def main(
         "min_learning_rate": min_learning_rate,
         "num_warmup_iterations": num_warmup_iterations,
         "cosine_annealing_iterations": cosine_annealing_iterations,
+        "gradient_accumulation_steps": gradient_accumulation_steps,
 
         "batch_size": batch_size,
         "epochs": epochs,
@@ -142,7 +143,7 @@ def main(
             xs, ys = get_batch(dataset=train_set, batch_size=batch_size, context_size=context_length, device=device)
             logits = model(xs)
 
-            loss = cross_entropy_loss(logits[:, -1, :], ys[:, -1])
+            loss = cross_entropy_loss(logits, ys)
             print(f"Iteration {iteration}:{grad_step}, loss: {loss.item()}")
             total_train_loss += loss.item()
 
@@ -184,7 +185,7 @@ def main(
         # Also log validation
         val_xs, val_ys = get_batch(dataset=val_set, batch_size=batch_size, context_size=context_length, device=device)
         val_logits = model(val_xs)
-        val_loss = cross_entropy_loss(val_logits[:, -1, :], val_ys[:, -1])
+        val_loss = cross_entropy_loss(val_logits, val_ys)
 
         avg_train_loss = total_train_loss / gradient_accumulation_steps
 
