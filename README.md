@@ -53,8 +53,14 @@ cd ..
 
 
 ### Commands to launch
+
+Things we found:
+- Sweet spot for learning rate seems to be 1e-3
+- weight_decay seems to be 5e-3
+- beta2 seems to be 0.95
+
 ```
-uv run ./cs336_basics/training/training_loop.py --train-dataset data/TinystoriesV2-train.npy --val-dataset data/TinystoriesV2-valid.npy --num-layers 4 --vocab-size 10000 --context-length 256 --d-model 512 --num-heads 16 --d-ff 1344 --rope-theta 10000 --beta1 0.9 --beta2 0.999 --learning-rate 0.001 --weight-decay 0.001 --batch-size 32 --epochs 400 --device mps --save-every 500 --save-path ./checkpoints --enable-wandb --num-warmup-iterations 40 --gradient-accumulation-steps 4
+uv run ./cs336_basics/training/training_loop.py --train-dataset data/TinystoriesV2-train.npy --val-dataset data/TinystoriesV2-valid.npy --num-layers 4 --vocab-size 10000 --context-length 256 --d-model 512 --num-heads 16 --d-ff 1344 --rope-theta 10000 --beta1 0.9 --beta2 0.95 --learning-rate 0.001 --weight-decay 0.005 --batch-size 32 --epochs 4000 --device mps --save-every 500 --save-path ./checkpoints --enable-wandb --num-warmup-iterations 200 --gradient-accumulation-steps 1
 ```
 
 ```
